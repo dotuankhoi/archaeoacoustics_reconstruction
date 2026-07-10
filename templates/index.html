@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Archaeoacoustics · Virtual Soundscape Reconstruction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Variables ──────────────────────────────────────────────────────────── */
+:root {
+  --bg:  #050507;
+  --s1:  #0B0B0E;
+  --s2:  #101014;
+  --s3:  #151519;
+  --br:  #1C1C22;
+  --br2: #262630;
+  --ac:  #00D9C4;
+  --acg: rgba(0,217,196,.15);
+  --tx:  #EBEBEF;
+  --tx2: #52525C;
+  --tx3: #202026;
+  --red: #FF3355;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--tx);
+  font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-size:13px;line-height:1.5;min-height:100vh;
+}
+.mono{font-family:'JetBrains Mono','Cascadia Code','SF Mono',ui-monospace,monospace}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+header{
+  padding:20px 36px 16px;
+  display:flex;align-items:center;gap:12px;
+}
+.logo-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--ac);flex-shrink:0;
+  box-shadow:0 0 10px rgba(0,217,196,.7);
+}
+.logo-txt{
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--ac);
+}
+.logo-sep{width:1px;height:14px;background:var(--br2);margin:0 4px}
+h1{font-size:17px;font-weight:600;letter-spacing:-.03em;color:var(--tx)}
+.sub{font-size:10px;color:var(--tx2);margin-left:auto;white-space:nowrap}
+
+/* ── Dividers ────────────────────────────────────────────────────────────── */
+.divider{height:1px;background:var(--br)}
+
+/* ── Preset cards ───────────────────────────────────────────────────────── */
+.presets-row{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:8px;padding:16px 36px;
+}
+.p-card{
+  background:var(--s2);border-radius:8px;
+  padding:16px 16px 14px;cursor:pointer;
+  transition:background .15s,border-left-color .15s;
+  position:relative;overflow:hidden;user-select:none;
+  border-left:3px solid transparent;
+}
+.p-card:hover{background:var(--s3)}
+.p-card.on{background:var(--s3);border-left-color:var(--ac)}
+.p-num{
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;color:var(--tx3);margin-bottom:12px;letter-spacing:.12em;
+}
+.p-card.on .p-num{color:var(--ac);opacity:.65}
+.p-name{font-size:13px;font-weight:600;color:var(--tx);margin-bottom:2px}
+.p-dims{font-size:9px;color:var(--tx2);margin-bottom:12px}
+.p-rt60-row{display:flex;align-items:baseline;gap:4px;margin-bottom:2px}
+.p-rt60{
+  font-family:'JetBrains Mono',monospace;
+  font-size:22px;font-weight:600;color:var(--tx);
+  font-variant-numeric:tabular-nums;
+}
+.p-card.on .p-rt60{color:var(--ac)}
+.p-rt60-unit{font-size:9px;color:var(--tx2)}
+.p-rt60-lbl{
+  font-size:8px;color:var(--tx3);
+  text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;
+}
+.p-tags{display:flex;flex-wrap:wrap;gap:4px}
+.tag{
+  font-size:8px;padding:2px 6px;border-radius:3px;
+  background:var(--s1);color:var(--tx2);
+}
+
+/* ── Viz row ────────────────────────────────────────────────────────────── */
+.viz-row{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:8px;padding:8px 36px;
+}
+.viz-panel{background:var(--s1);border-radius:6px;overflow:hidden}
+.viz-head{
+  padding:9px 14px;border-bottom:1px solid var(--br);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.viz-title{
+  font-size:9px;color:var(--tx2);
+  text-transform:uppercase;letter-spacing:.12em;
+  font-family:'JetBrains Mono',monospace;
+}
+.viz-badge{font-size:9px;color:var(--tx3);font-family:'JetBrains Mono',monospace}
+.viz-badge b{color:var(--ac);font-weight:500}
+canvas{display:block}
+#roomCanvas{width:100%;height:260px}
+#irCanvas{width:100%;height:170px;display:none}
+.ir-placeholder{
+  height:170px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;
+  color:var(--tx3);font-size:9px;font-family:'JetBrains Mono',monospace;
+}
+.spinner{
+  width:16px;height:16px;border-radius:50%;
+  border:1.5px solid var(--br2);border-top-color:var(--ac);
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.mat-legend{
+  padding:7px 14px;border-top:1px solid var(--br);
+  display:flex;flex-wrap:wrap;gap:8px;
+}
+.mat-item{display:flex;align-items:center;gap:4px;font-size:8px;color:var(--tx2)}
+.mat-dot{width:8px;height:3px;border-radius:1px;flex-shrink:0}
+
+/* ── Stats bar ──────────────────────────────────────────────────────────── */
+.stats-bar{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:1px;background:var(--br);
+  margin:8px 36px;border-radius:6px;overflow:hidden;
+}
+.stat{background:var(--s1);padding:14px 16px;text-align:center}
+.stat-v{
+  font-family:'JetBrains Mono',monospace;
+  font-size:24px;font-weight:600;color:var(--tx);
+  font-variant-numeric:tabular-nums;
+}
+.stat-v.ac{color:var(--ac)}
+.stat-l{font-size:8px;color:var(--tx3);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+
+/* ── Record panel ───────────────────────────────────────────────────────── */
+.rec-panel{
+  margin:0 36px;background:var(--s1);border-radius:6px;
+  padding:20px 24px;
+  display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center;
+}
+.rec-ctrl{display:flex;flex-direction:column;align-items:center;gap:8px}
+#recBtn{
+  width:60px;height:60px;border-radius:50%;
+  border:1.5px solid var(--red);background:transparent;color:var(--red);
+  font-size:20px;cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 0 rgba(255,51,85,0);
+}
+#recBtn:hover:not(:disabled){
+  background:rgba(255,51,85,.08);box-shadow:0 0 0 6px rgba(255,51,85,.06);
+}
+#recBtn.rec{
+  background:rgba(255,51,85,.1);border-color:var(--red);
+  animation:pulse-r 1.2s infinite;
+}
+#recBtn.proc{
+  border-color:var(--ac);color:var(--ac);
+  animation:pulse-ac 1.2s infinite;cursor:not-allowed;
+}
+#recBtn:disabled{opacity:.3;cursor:not-allowed;animation:none!important;box-shadow:none!important}
+@keyframes pulse-r{
+  0%,100%{box-shadow:0 0 0 0 rgba(255,51,85,.4)}
+  60%{box-shadow:0 0 0 14px rgba(255,51,85,0)}
+}
+@keyframes pulse-ac{
+  0%,100%{box-shadow:0 0 0 0 rgba(0,217,196,.4)}
+  60%{box-shadow:0 0 0 14px rgba(0,217,196,0)}
+}
+.rec-lbl{font-size:9px;color:var(--tx2);text-transform:uppercase;letter-spacing:.12em}
+.rec-timer{
+  font-family:'JetBrains Mono',monospace;
+  font-size:13px;font-weight:600;color:var(--red);
+  font-variant-numeric:tabular-nums;display:none;
+}
+.upload-btn{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:7px 12px;border-radius:5px;
+  border:1px solid var(--br2);color:var(--tx2);
+  font-size:9px;cursor:pointer;transition:all .15s;
+  text-transform:uppercase;letter-spacing:.1em;
+  background:transparent;font-family:inherit;white-space:nowrap;
+}
+.upload-btn:hover:not(:disabled){border-color:var(--ac);color:var(--ac)}
+.upload-btn:disabled{opacity:.3;cursor:not-allowed}
+.wave-area{display:flex;flex-direction:column;gap:6px}
+.wave-lbl{font-size:8px;color:var(--tx3);text-transform:uppercase;letter-spacing:.12em}
+#waveCanvas{
+  width:100%;height:64px;border-radius:5px;
+  background:#06060A;border:1px solid var(--br);
+}
+#recStatus{font-size:10px;color:var(--tx2);margin-top:4px}
+
+/* ── Playback ────────────────────────────────────────────────────────────── */
+.pb-row{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  margin:8px 36px 32px;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .3s,transform .3s;
+}
+.pb-row.show{opacity:1;transform:translateY(0)}
+.pb-card{background:var(--s1);border-radius:6px;padding:14px;border-left:3px solid var(--br2)}
+.pb-card.wet{border-left-color:var(--ac)}
+.pb-head{margin-bottom:10px}
+.pb-dot{
+  display:inline-block;width:6px;height:6px;border-radius:50%;
+  margin-right:5px;vertical-align:middle;
+}
+.pb-title{font-size:11px;font-weight:600}
+.pb-sub{font-size:9px;color:var(--tx2);margin-top:1px}
+.pb-wave{
+  height:40px;border-radius:4px;border:1px solid var(--br);
+  background:#06060A;width:100%;margin-bottom:8px;
+}
+audio{width:100%;height:32px;accent-color:var(--ac);display:block}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--br2);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo-dot"></div>
+  <span class="logo-txt">Archaeoacoustics</span>
+  <div class="logo-sep"></div>
+  <h1>Virtual Soundscape Reconstruction</h1>
+  <div class="sub">2D ray tracing · convolution · historical spaces</div>
+</header>
+<div class="divider"></div>
+
+<!-- Preset cards -->
+<div class="presets-row">
+
+  <div class="p-card" data-key="amphitheater" onclick="selectPreset('amphitheater')">
+    <div class="p-num">01</div>
+    <div class="p-name">Roman Theatre</div>
+    <div class="p-dims">40 × 25 m · Open-air cavea</div>
+    <div class="p-rt60-row">
+      <span class="p-rt60">1156</span>
+      <span class="p-rt60-unit">ms</span>
+    </div>
+    <div class="p-rt60-lbl">RT₆₀ reverb time</div>
+    <div class="p-tags">
+      <span class="tag">marble scaena</span>
+      <span class="tag">stone banks</span>
+      <span class="tag">open sky</span>
+    </div>
+  </div>
+
+  <div class="p-card" data-key="cathedral" onclick="selectPreset('cathedral')">
+    <div class="p-num">02</div>
+    <div class="p-name">Renaissance Cathedral</div>
+    <div class="p-dims">30 × 18 m · Stone nave</div>
+    <div class="p-rt60-row">
+      <span class="p-rt60">841</span>
+      <span class="p-rt60-unit">ms</span>
+    </div>
+    <div class="p-rt60-lbl">RT₆₀ reverb time</div>
+    <div class="p-tags">
+      <span class="tag">plaster vault</span>
+      <span class="tag">tapestry choir</span>
+      <span class="tag">stone</span>
+    </div>
+  </div>
+
+  <div class="p-card" data-key="bouleuterion" onclick="selectPreset('bouleuterion')">
+    <div class="p-num">03</div>
+    <div class="p-name">Greek Bouleuterion</div>
+    <div class="p-dims">18 × 10 m · Council hall</div>
+    <div class="p-rt60-row">
+      <span class="p-rt60">287</span>
+      <span class="p-rt60-unit">ms</span>
+    </div>
+    <div class="p-rt60-lbl">RT₆₀ reverb time</div>
+    <div class="p-tags">
+      <span class="tag">timber roof</span>
+      <span class="tag">stone benches</span>
+      <span class="tag">earth floor</span>
+    </div>
+  </div>
+
+  <div class="p-card" data-key="great_hall" onclick="selectPreset('great_hall')">
+    <div class="p-num">04</div>
+    <div class="p-name">Medieval Great Hall</div>
+    <div class="p-dims">25 × 8 m · Castle interior</div>
+    <div class="p-rt60-row">
+      <span class="p-rt60">419</span>
+      <span class="p-rt60-unit">ms</span>
+    </div>
+    <div class="p-rt60-lbl">RT₆₀ reverb time</div>
+    <div class="p-tags">
+      <span class="tag">oak hammer-beam</span>
+      <span class="tag">curtains</span>
+      <span class="tag">stone walls</span>
+    </div>
+  </div>
+
+</div>
+<div class="divider"></div>
+
+<!-- Viz row -->
+<div class="viz-row">
+
+  <div class="viz-panel">
+    <div class="viz-head">
+      <div class="viz-title">Room Geometry · Ray Simulation</div>
+      <div class="viz-badge" id="roomBadge">—</div>
+    </div>
+    <canvas id="roomCanvas"></canvas>
+    <div class="mat-legend" id="matLegend"></div>
+  </div>
+
+  <div class="viz-panel">
+    <div class="viz-head">
+      <div class="viz-title">Acoustic Impulse Response (AIR)</div>
+      <div class="viz-badge" id="irBadge">—</div>
+    </div>
+    <div id="irPlaceholder" class="ir-placeholder">
+      <div>Select a preset to compute the AIR</div>
+    </div>
+    <canvas id="irCanvas"></canvas>
+  </div>
+
+</div>
+
+<!-- Stats bar -->
+<div class="stats-bar">
+  <div class="stat">
+    <div class="stat-v ac" id="sRT60">—</div>
+    <div class="stat-l">RT₆₀ (ms)</div>
+  </div>
+  <div class="stat">
+    <div class="stat-v ac" id="sHits">—</div>
+    <div class="stat-l">Ray Hits</div>
+  </div>
+  <div class="stat">
+    <div class="stat-v" id="sDirect">—</div>
+    <div class="stat-l">Direct Sound (ms)</div>
+  </div>
+  <div class="stat">
+    <div class="stat-v" id="sPreset">—</div>
+    <div class="stat-l">Active Preset</div>
+  </div>
+</div>
+
+<!-- Record panel -->
+<div class="rec-panel">
+  <div class="rec-ctrl">
+    <button id="recBtn" onclick="toggleRecord()" title="Record / Stop">●</button>
+    <div class="rec-lbl" id="recLbl">Record</div>
+    <div class="rec-timer" id="recTimer">0:00</div>
+    <input type="file" id="fileInput" accept="audio/*" style="display:none" onchange="handleFileUpload(this.files[0])">
+    <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()" title="Upload audio file">
+      ↑ Upload File
+    </button>
+  </div>
+  <div class="wave-area">
+    <div class="wave-lbl">Live Microphone · Waveform</div>
+    <canvas id="waveCanvas"></canvas>
+    <div id="recStatus">Select a historical space above, then press Record or upload an audio file.</div>
+  </div>
+</div>
+
+<!-- Playback row -->
+<div class="pb-row" id="pbRow">
+  <div class="pb-card">
+    <div class="pb-head">
+      <span class="pb-dot" style="background:#3A3A4A"></span>
+      <span class="pb-title">Your Voice — Dry</span>
+      <div class="pb-sub">Original recording, no room acoustics</div>
+    </div>
+    <canvas id="dryWave" class="pb-wave"></canvas>
+    <audio id="dryAudio" controls></audio>
+  </div>
+  <div class="pb-card wet">
+    <div class="pb-head">
+      <span class="pb-dot" style="background:var(--ac)"></span>
+      <span class="pb-title" id="wetTitle">In the Space</span>
+      <div class="pb-sub" id="wetSub">Convolved with room AIR</div>
+    </div>
+    <canvas id="wetWave" class="pb-wave"></canvas>
+    <audio id="wetAudio" controls></audio>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+//  State
+// ─────────────────────────────────────────────────────────────────────────────
+let preset       = null;
+let presetsData  = {};
+let currentIR    = null;
+let isRecording  = false;
+let isProcessing = false;
+let mediaRec     = null;
+let audioChunks  = [];
+let timerIv      = null;
+let recStart     = 0;
+let analyserNode = null;
+let liveAFid     = null;
+let rayAFid      = null;
+let rayPaths     = [];
+let rayTick      = 0;
+const DPR        = window.devicePixelRatio || 1;
+
+function setInputsLocked(locked) {
+  document.getElementById('recBtn').disabled    = locked;
+  document.getElementById('uploadBtn').disabled = locked;
+}
+
+const NAMES = {
+  amphitheater: 'Roman Theatre',
+  cathedral:    'Renaissance Cathedral',
+  bouleuterion: 'Greek Bouleuterion',
+  great_hall:   'Medieval Great Hall',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Boot
+// ─────────────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  ['roomCanvas','irCanvas','waveCanvas','dryWave','wetWave'].forEach(sizeCanvas);
+  window.addEventListener('resize', () =>
+    ['roomCanvas','irCanvas','waveCanvas','dryWave','wetWave'].forEach(sizeCanvas));
+
+  const res = await fetch('/api/presets');
+  presetsData = await res.json();
+  selectPreset('cathedral');
+});
+
+function sizeCanvas(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  if (r.width === 0) return;
+  el.width  = Math.round(r.width  * DPR);
+  el.height = Math.round(r.height * DPR);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Preset selection
+// ─────────────────────────────────────────────────────────────────────────────
+async function selectPreset(key) {
+  preset = key;
+  document.querySelectorAll('.p-card').forEach(c =>
+    c.classList.toggle('on', c.dataset.key === key));
+  document.getElementById('sPreset').textContent =
+    key.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+  document.getElementById('recStatus').textContent =
+    `"${NAMES[key]}" selected — press Record to begin.`;
+
+  const d = presetsData[key];
+  if (d) {
+    drawRoom(d.walls, d.source, d.receiver);
+    buildAndAnimateRays(d.walls, d.source, d.receiver);
+  }
+
+  document.getElementById('irPlaceholder').innerHTML =
+    '<div class="spinner"></div><div>Computing impulse response…</div>';
+  document.getElementById('irPlaceholder').style.display = 'flex';
+  document.getElementById('irCanvas').style.display = 'none';
+  document.getElementById('irBadge').textContent  = 'computing…';
+  document.getElementById('sRT60').textContent    = '…';
+  document.getElementById('sHits').textContent    = '…';
+  document.getElementById('sDirect').textContent  = '…';
+
+  try {
+    const res = await fetch(`/api/trace/${key}?rays=2000`);
+    currentIR = await res.json();
+    const { n_hits, rt60_ms, direct_ms } = currentIR;
+
+    document.getElementById('sRT60').textContent   = rt60_ms;
+    document.getElementById('sHits').textContent   = n_hits;
+    document.getElementById('sDirect').textContent = direct_ms;
+    document.getElementById('irBadge').innerHTML   =
+      `<b>${n_hits}</b> hits · RT₆₀ <b>${rt60_ms}</b> ms`;
+    document.getElementById('roomBadge').innerHTML =
+      `<b>${presetsData[key].walls.length}</b> walls`;
+
+    document.getElementById('irPlaceholder').style.display = 'none';
+    const irc = document.getElementById('irCanvas');
+    irc.style.display = 'block';
+    sizeCanvas('irCanvas');
+    drawIR(currentIR);
+  } catch(e) {
+    document.getElementById('irPlaceholder').innerHTML =
+      '<div style="color:#FF3355">Failed to compute IR</div>';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Room drawing
+// ─────────────────────────────────────────────────────────────────────────────
+function drawRoom(walls, src, recv) {
+  const canvas = document.getElementById('roomCanvas');
+  sizeCanvas('roomCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width / DPR, H = canvas.height / DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  let x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity;
+  walls.forEach(w => {
+    x0=Math.min(x0,w.x0,w.x1); y0=Math.min(y0,w.y0,w.y1);
+    x1=Math.max(x1,w.x0,w.x1); y1=Math.max(y1,w.y0,w.y1);
+  });
+  x0=Math.min(x0,src[0],recv[0]); y0=Math.min(y0,src[1],recv[1]);
+  x1=Math.max(x1,src[0],recv[0]); y1=Math.max(y1,src[1],recv[1]);
+
+  const pad=34;
+  const scl = Math.min((W-pad*2)/(x1-x0||1), (H-pad*2)/(y1-y0||1));
+  const ox = pad + ((W-pad*2) - (x1-x0)*scl)/2 - x0*scl;
+  const oy = pad + ((H-pad*2) - (y1-y0)*scl)/2 - y0*scl;
+  const ts = (x,y) => ({ x: ox + x*scl, y: H - (oy + y*scl) });
+
+  canvas._ts = ts; canvas._walls = walls; canvas._src = src; canvas._recv = recv;
+
+  // Background
+  ctx.fillStyle = '#050507'; ctx.fillRect(0,0,W,H);
+
+  // Subtle grid
+  ctx.strokeStyle = '#0C0C10'; ctx.lineWidth = 1;
+  const gstep = (x1-x0) / 6;
+  for (let gx=x0; gx<=x1+.01; gx+=gstep) {
+    const a=ts(gx,y0), b=ts(gx,y1);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+  const hstep = (y1-y0) / 4;
+  for (let gy=y0; gy<=y1+.01; gy+=hstep) {
+    const a=ts(x0,gy), b=ts(x1,gy);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+
+  // Walls
+  walls.forEach(w => {
+    const a=ts(w.x0,w.y0), b=ts(w.x1,w.y1);
+    const col = w.color || '#668899';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = col+'22'; ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  });
+
+  // Source
+  const sp = ts(src[0], src[1]);
+  ctx.shadowColor='#00D9C4'; ctx.shadowBlur=16;
+  ctx.fillStyle='#00D9C4';
+  ctx.beginPath(); ctx.arc(sp.x, sp.y, 5, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#00D9C4'; ctx.font='8px "JetBrains Mono",monospace';
+  ctx.fillText('SOURCE', sp.x+9, sp.y+4);
+
+  // Receiver
+  const rp = ts(recv[0], recv[1]);
+  ctx.shadowColor='#FF3355'; ctx.shadowBlur=14;
+  ctx.fillStyle='#FF3355';
+  ctx.beginPath(); ctx.arc(rp.x, rp.y, 5, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#FF3355'; ctx.font='8px "JetBrains Mono",monospace';
+  ctx.fillText('RECEIVER', rp.x+9, rp.y+4);
+
+  canvas._base = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  // Material legend
+  const leg = document.getElementById('matLegend');
+  const seen = new Set();
+  leg.innerHTML = '';
+  walls.forEach(w => {
+    if (seen.has(w.material)) return;
+    seen.add(w.material);
+    const c = w.color || '#888';
+    leg.innerHTML += `<div class="mat-item">
+      <div class="mat-dot" style="background:${c}"></div>
+      <span>${w.material} (α=${w.absorption})</span>
+    </div>`;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Client-side ray tracer (animation only)
+// ─────────────────────────────────────────────────────────────────────────────
+function wallNormal(w) {
+  const dx=w.x1-w.x0, dy=w.y1-w.y0, l=Math.hypot(dx,dy);
+  return {x:-dy/l, y:dx/l};
+}
+function hitWall(ox,oy,dx,dy,w) {
+  const vx=w.x1-w.x0, vy=w.y1-w.y0;
+  const den = dx*vy - dy*vx;
+  if (Math.abs(den)<1e-12) return null;
+  const t = ((w.x0-ox)*vy - (w.y0-oy)*vx) / den;
+  const s = ((w.x0-ox)*dy - (w.y0-oy)*dx) / den;
+  return (t>1e-6 && s>=0 && s<=1) ? t : null;
+}
+function traceRay(walls, sx, sy, angle, maxB=9) {
+  const segs = [{x:sx,y:sy}];
+  let px=sx, py=sy, dx=Math.cos(angle), dy=Math.sin(angle);
+  for (let b=0; b<maxB; b++) {
+    let tMin=Infinity, hw=null;
+    walls.forEach(w => { const t=hitWall(px,py,dx,dy,w); if(t&&t<tMin){tMin=t;hw=w;} });
+    if (!hw) break;
+    const hx=px+tMin*dx, hy=py+tMin*dy;
+    segs.push({x:hx,y:hy});
+    const nd=wallNormal(hw);
+    const od2=segs[segs.length-2];
+    const rdx=(hx-od2.x)/(tMin||1);
+    const rdy=(hy-od2.y)/(tMin||1);
+    const d2=rdx*nd.x+rdy*nd.y>0?{x:-nd.x,y:-nd.y}:nd;
+    const dot2=rdx*d2.x+rdy*d2.y;
+    dx=rdx-2*dot2*d2.x; dy=rdy-2*dot2*d2.y;
+    const l=Math.hypot(dx,dy); dx/=l; dy/=l;
+    px=hx+dx*1e-5; py=hy+dy*1e-5;
+  }
+  return segs;
+}
+
+function buildAndAnimateRays(walls, src, recv) {
+  rayPaths = [];
+  const N=18;
+  for (let i=0; i<N; i++) {
+    rayPaths.push(traceRay(walls, src[0], src[1], (i/N)*Math.PI*2, 9));
+  }
+  if (rayAFid) cancelAnimationFrame(rayAFid);
+  rayTick = 0;
+  animRays();
+}
+
+function animRays() {
+  const canvas = document.getElementById('roomCanvas');
+  if (!canvas._base || !canvas._ts) { rayAFid=requestAnimationFrame(animRays); return; }
+  const ctx = canvas.getContext('2d');
+  const W=canvas.width/DPR, H=canvas.height/DPR;
+
+  ctx.putImageData(canvas._base, 0, 0);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+
+  const ts = canvas._ts;
+  const T = (rayTick % 150) / 150;
+
+  rayPaths.forEach((path, ri) => {
+    if (path.length<2) return;
+    const delay = ri / rayPaths.length;
+    const lt = ((T - delay + 1) % 1);
+
+    let total=0;
+    const lens=path.slice(1).map((p,i)=>{
+      const d=Math.hypot(p.x-path[i].x, p.y-path[i].y); total+=d; return d;
+    });
+
+    const front = lt * total * 2.2;
+    const tail  = front - total * 0.55;
+
+    let accum=0;
+    path.slice(1).forEach((p,i) => {
+      const segS=accum, segE=accum+lens[i];
+      accum+=lens[i];
+      if (segS > front) return;
+
+      const a  = ts(path[i].x, path[i].y);
+      const b  = ts(p.x, p.y);
+      const drawFrac = Math.min(1,(front-segS)/lens[i]);
+      const bx = a.x+(b.x-a.x)*drawFrac, by = a.y+(b.y-a.y)*drawFrac;
+
+      const fadeIn  = Math.min(1, (front-segS)/Math.max(lens[i],.01));
+      const fadeOut = Math.max(0, Math.min(1, (segE-tail)/(total*0.55)));
+      // Fade brightness with bounce depth — early segments brighter
+      const depthFade = Math.max(0.3, 1 - i * 0.12);
+      const alpha = fadeIn * fadeOut * depthFade * 0.8;
+      if (alpha < 0.01) return;
+
+      // Monochromatic cyan — no rainbow, just single accent color
+      ctx.strokeStyle = `rgba(0,217,196,${alpha})`;
+      ctx.lineWidth=1.3; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(bx,by); ctx.stroke();
+    });
+  });
+
+  rayTick++;
+  rayAFid = requestAnimationFrame(animRays);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  IR drawing
+// ─────────────────────────────────────────────────────────────────────────────
+function drawIR(data) {
+  const canvas = document.getElementById('irCanvas');
+  const ctx = canvas.getContext('2d');
+  const W=canvas.width/DPR, H=canvas.height/DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+
+  const { ir, max_time, rt60_ms, direct_ms } = data;
+  const maxMs = max_time * 1000;
+  const pL=44, pR=12, pT=14, pB=26;
+  const dW=W-pL-pR, dH=H-pT-pB;
+
+  // Background
+  ctx.fillStyle='#050507'; ctx.fillRect(0,0,W,H);
+
+  // Time grid
+  const ticks=[0,250,500,750,1000,1500,2000,2500].filter(t=>t<=maxMs);
+  ctx.strokeStyle='#0E0E14'; ctx.lineWidth=1;
+  ticks.forEach(t => {
+    const x=pL+(t/maxMs)*dW;
+    ctx.beginPath(); ctx.moveTo(x,pT); ctx.lineTo(x,pT+dH); ctx.stroke();
+    ctx.fillStyle='#333340'; ctx.font='8px "JetBrains Mono",monospace'; ctx.textAlign='center';
+    ctx.fillText(t+'ms', x, H-5);
+  });
+
+  // RT60 dashed marker
+  if (rt60_ms>0) {
+    const rx=pL+(rt60_ms/maxMs)*dW;
+    ctx.setLineDash([3,3]);
+    ctx.strokeStyle='rgba(0,217,196,.35)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(rx,pT); ctx.lineTo(rx,pT+dH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='rgba(0,217,196,.55)'; ctx.font='8px "JetBrains Mono",monospace'; ctx.textAlign='center';
+    ctx.fillText('RT₆₀',rx,pT+9);
+  }
+
+  // Bars
+  const nBars = ir.length;
+  const directIdx = (direct_ms / maxMs) * nBars;
+  const bw = Math.max(1, dW / nBars);
+
+  for (let i=0; i<nBars; i++) {
+    const peak = ir[i];
+    if (peak < 0.001) continue;
+
+    const x  = pL + (i / nBars) * dW;
+    const bh = peak * dH;
+    const by = pT + dH - bh;
+    const t  = i / nBars;
+    const isDirect = Math.abs(i - directIdx) < 3;
+
+    if (isDirect) {
+      // Direct sound spike — full brightness with glow
+      ctx.shadowColor = '#00D9C4';
+      ctx.shadowBlur  = 8;
+      ctx.fillStyle   = '#00D9C4';
+    } else if (t < 0.08) {
+      // Early reflections — bright cyan, fading
+      const p = t / 0.08;
+      const a = Math.round(255 * (1 - p * 0.5));
+      ctx.shadowBlur = 0;
+      ctx.fillStyle  = `rgba(0,${a},${Math.round(180-40*p)},0.88)`;
+    } else {
+      // Late reverberation — dim teal, decaying
+      const fade = Math.max(0.2, 0.7 * (1 - t * 0.75));
+      ctx.shadowBlur = 0;
+      ctx.fillStyle  = `rgba(0,140,130,${fade})`;
+    }
+
+    ctx.fillRect(x, by, bw, bh);
+  }
+  ctx.shadowBlur = 0;
+
+  // Direct sound label
+  if (direct_ms>0) {
+    const ddx=pL+(direct_ms/maxMs)*dW;
+    ctx.fillStyle='rgba(0,217,196,.5)'; ctx.font='8px "JetBrains Mono",monospace'; ctx.textAlign='center';
+    ctx.fillText('direct',ddx,H-5);
+  }
+
+  // Y axis label
+  ctx.save();
+  ctx.fillStyle='#333340'; ctx.font='8px "JetBrains Mono",monospace'; ctx.textAlign='center';
+  ctx.translate(10,pT+dH/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('ENERGY',0,0); ctx.restore();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Recording
+// ─────────────────────────────────────────────────────────────────────────────
+function enterProcessing(statusMsg) {
+  isProcessing = true;
+  setInputsLocked(true);
+  const btn = document.getElementById('recBtn');
+  btn.className = 'proc'; btn.textContent = '◌';
+  document.getElementById('recLbl').textContent = 'Processing…';
+  document.getElementById('recStatus').textContent = statusMsg;
+}
+
+function exitProcessing(ok, msg) {
+  isProcessing = false;
+  setInputsLocked(false);
+  const btn = document.getElementById('recBtn');
+  btn.className = ''; btn.textContent = '●';
+  document.getElementById('recLbl').textContent = isRecording ? 'Stop' : 'Record';
+  document.getElementById('recTimer').style.display = 'none';
+  document.getElementById('recStatus').textContent = msg;
+}
+
+async function finalise(wavBlob, dryBlobForPlayer, audioCtx) {
+  const ab   = await dryBlobForPlayer.arrayBuffer();
+  const abuf = await audioCtx.decodeAudioData(ab);
+  const mono = toMono(abuf);
+  drawStaticWave('dryWave', mono, '#3A3A4A');
+  document.getElementById('dryAudio').src = URL.createObjectURL(dryBlobForPlayer);
+
+  const fd = new FormData();
+  fd.append('audio', wavBlob, 'audio.wav');
+  fd.append('preset', preset);
+  const resp = await fetch('/api/process', {method:'POST', body:fd});
+  if (!resp.ok) throw new Error('Server error ' + resp.status);
+  const wetBlob = await resp.blob();
+
+  document.getElementById('wetAudio').src = URL.createObjectURL(wetBlob);
+
+  const wetAB  = await wetBlob.arrayBuffer();
+  const wetBuf = await new AudioContext().decodeAudioData(wetAB);
+  drawStaticWave('wetWave', wetBuf.getChannelData(0), '#00D9C4');
+
+  document.getElementById('wetTitle').textContent = `In the ${NAMES[preset]}`;
+  document.getElementById('wetSub').textContent =
+    `${currentIR?.n_hits||'—'} ray hits · RT₆₀ ${currentIR?.rt60_ms||'—'} ms`;
+
+  document.getElementById('pbRow').classList.add('show');
+}
+
+async function toggleRecord() {
+  if (!preset) {
+    document.getElementById('recStatus').textContent = 'Select a historical space first.';
+    return;
+  }
+  if (isProcessing) return;
+  isRecording ? stopRecording() : await startRecording();
+}
+
+async function startRecording() {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+  } catch(e) {
+    document.getElementById('recStatus').textContent = 'Microphone access denied.';
+    return;
+  }
+  isRecording = true;
+  audioChunks = [];
+
+  const actx = new AudioContext();
+  const msrc = actx.createMediaStreamSource(stream);
+  analyserNode = actx.createAnalyser();
+  analyserNode.fftSize = 512;
+  msrc.connect(analyserNode);
+  drawLiveWave();
+
+  const mime = ['audio/webm;codecs=opus','audio/webm','audio/ogg']
+    .find(t => MediaRecorder.isTypeSupported(t)) || '';
+  mediaRec = new MediaRecorder(stream, mime ? {mimeType:mime} : {});
+  mediaRec.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
+  mediaRec.onstop = async () => {
+    stream.getTracks().forEach(t=>t.stop());
+    isRecording = false;
+    clearInterval(timerIv);
+    if (liveAFid) cancelAnimationFrame(liveAFid);
+
+    enterProcessing('Applying room acoustics — this takes a few seconds…');
+    try {
+      const recBlob = new Blob(audioChunks, {type: audioChunks[0]?.type||'audio/webm'});
+      const ab      = await recBlob.arrayBuffer();
+      const abuf    = await actx.decodeAudioData(ab.slice(0));
+      const wavBlob = encodeWAV(toMono(abuf), abuf.sampleRate);
+      await finalise(wavBlob, recBlob, actx);
+      exitProcessing(true, 'Done — play both tracks below to compare.');
+    } catch(e) {
+      console.error(e);
+      exitProcessing(false, 'Error: ' + e.message);
+    }
+  };
+  mediaRec.start(100);
+
+  const btn = document.getElementById('recBtn');
+  btn.className='rec'; btn.textContent='■';
+  document.getElementById('recLbl').textContent = 'Stop';
+  document.getElementById('recTimer').style.display = 'block';
+  recStart = Date.now();
+  timerIv = setInterval(()=>{
+    const s = Math.floor((Date.now()-recStart)/1000);
+    document.getElementById('recTimer').textContent =
+      `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+  }, 200);
+  document.getElementById('recStatus').textContent = 'Recording… press the button again to stop.';
+}
+
+function stopRecording() {
+  if (mediaRec?.state !== 'inactive') mediaRec.stop();
+}
+
+async function handleFileUpload(file) {
+  if (!file) return;
+  if (!preset) {
+    document.getElementById('recStatus').textContent = 'Select a historical space first.';
+    return;
+  }
+  if (isProcessing || isRecording) return;
+
+  enterProcessing(`Processing "${file.name}" — applying room acoustics…`);
+  try {
+    const actx  = new AudioContext();
+    const ab    = await file.arrayBuffer();
+    const abuf  = await actx.decodeAudioData(ab);
+    const mono  = toMono(abuf);
+    const wavBlob = encodeWAV(mono, abuf.sampleRate);
+    await finalise(wavBlob, file, actx);
+    exitProcessing(true, `Done — "${file.name}" processed through ${NAMES[preset]}.`);
+  } catch(e) {
+    console.error(e);
+    exitProcessing(false, 'Error: ' + e.message);
+  }
+  document.getElementById('fileInput').value = '';
+}
+
+function toMono(abuf) {
+  if (abuf.numberOfChannels===1) return abuf.getChannelData(0);
+  const L=abuf.getChannelData(0), R=abuf.getChannelData(1);
+  const m=new Float32Array(L.length);
+  for(let i=0;i<L.length;i++) m[i]=(L[i]+R[i])/2;
+  return m;
+}
+
+function encodeWAV(samples, sr) {
+  const n=samples.length;
+  const buf=new ArrayBuffer(44+n*2);
+  const v=new DataView(buf);
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,'RIFF'); v.setUint32(4,36+n*2,true);
+  ws(8,'WAVE'); ws(12,'fmt '); v.setUint32(16,16,true);
+  v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,sr,true); v.setUint32(28,sr*2,true);
+  v.setUint16(32,2,true); v.setUint16(34,16,true);
+  ws(36,'data'); v.setUint32(40,n*2,true);
+  for(let i=0;i<n;i++){
+    const s=Math.max(-1,Math.min(1,samples[i]));
+    v.setInt16(44+i*2,s<0?s*0x8000:s*0x7FFF,true);
+  }
+  return new Blob([buf],{type:'audio/wav'});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Waveform drawing
+// ─────────────────────────────────────────────────────────────────────────────
+function drawLiveWave() {
+  const canvas=document.getElementById('waveCanvas');
+  sizeCanvas('waveCanvas');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width/DPR, H=canvas.height/DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+
+  function frame() {
+    if (!isRecording) return;
+    liveAFid=requestAnimationFrame(frame);
+    ctx.fillStyle='#06060A'; ctx.fillRect(0,0,W,H);
+    if (!analyserNode) return;
+    const buf=new Uint8Array(analyserNode.frequencyBinCount);
+    analyserNode.getByteTimeDomainData(buf);
+    // Centre line
+    ctx.strokeStyle='rgba(0,217,196,.12)'; ctx.lineWidth=.5;
+    ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+    // Waveform
+    ctx.strokeStyle='#00D9C4'; ctx.lineWidth=1.5; ctx.beginPath();
+    buf.forEach((v,i)=>{
+      const x=(i/buf.length)*W, y=((v/128)-1)*H*.42+H/2;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+  frame();
+}
+
+function drawStaticWave(id, samples, color) {
+  const canvas=document.getElementById(id);
+  sizeCanvas(id);
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width/DPR, H=canvas.height/DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.fillStyle='#06060A'; ctx.fillRect(0,0,W,H);
+
+  ctx.strokeStyle=color+'22'; ctx.lineWidth=.5;
+  ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+
+  const step=Math.max(1,Math.ceil(samples.length/W));
+  ctx.strokeStyle=color; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(let i=0;i<W;i++){
+    const s=Math.floor(i*step), e=Math.min(s+step,samples.length);
+    let mn=Infinity, mx=-Infinity;
+    for(let j=s;j<e;j++){if(samples[j]<mn)mn=samples[j];if(samples[j]>mx)mx=samples[j];}
+    const yMn=(1-(mn+1)/2)*H, yMx=(1-(mx+1)/2)*H;
+    ctx.moveTo(i,yMn); ctx.lineTo(i,yMx);
+  }
+  ctx.stroke();
+}
+</script>
+</body>
+</html>
