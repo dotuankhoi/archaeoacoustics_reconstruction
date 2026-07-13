@@ -65,10 +65,10 @@ Full-length output preserves the natural ring-out decay beyond the dry signal le
 
 | Key | Space | Dimensions | RT₆₀ |
 |-----|-------|-----------|-------|
-| `amphitheater` | Roman Stone Theatre | 40 × 25 m | ~1156 ms |
-| `cathedral` | Renaissance Cathedral Nave | 30 × 18 m | ~841 ms |
-| `bouleuterion` | Greek Council Hall | 18 × 10 m | ~287 ms |
-| `great_hall` | Medieval Castle Great Hall | 25 × 8 m | ~419 ms |
+| `amphitheater` | Roman Stone Theatre | 40 × 25 m | ~93 ms |
+| `cathedral` | Renaissance Cathedral Nave | 30 × 18 m | ~857 ms |
+| `bouleuterion` | Greek Council Hall | 18 × 10 m | ~423 ms |
+| `great_hall` | Medieval Castle Great Hall | 25 × 8 m | ~619 ms |
 
 RT₆₀ values are simulation estimates and vary with ray count. Real-world values depend on furnishing density, audience absorption, and 3D geometry not captured by this 2D model.
 

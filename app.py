@@ -12,8 +12,12 @@ app = Flask(__name__)
 
 
 def _rt60(ir: np.ndarray, sr: int) -> int:
-    db = 20 * np.log10(np.maximum(np.abs(ir), 1e-10))
-    above = np.where(db > -60)[0]
+    energy = ir ** 2
+    edc = np.flip(np.cumsum(np.flip(energy)))
+    if edc[0] <= 0:
+        return 0
+    edc_db = 10 * np.log10(edc / edc[0] + 1e-12)
+    above = np.where(edc_db > -60)[0]
     return int(above[-1] / sr * 1000) if len(above) else 0
 
 

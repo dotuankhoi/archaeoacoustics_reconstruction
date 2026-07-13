@@ -89,8 +89,10 @@ def plot_room_and_rays(room: Room, hits: list[RayHit],
     ax_ir.set_ylabel("Normalised Energy", color="#AAAACC")
     ax_ir.set_title("Acoustic Impulse Response (AIR)", color="white", fontsize=10, pad=8)
 
-    ir_db = 20 * np.log10(np.maximum(np.abs(ir), 1e-10))
-    above_noise = np.where(ir_db > -60)[0]
+    energy = ir ** 2
+    edc = np.flip(np.cumsum(np.flip(energy)))
+    edc_db = 10 * np.log10(edc / (edc[0] + 1e-12) + 1e-12)
+    above_noise = np.where(edc_db > -60)[0]
     if len(above_noise) > 0:
         rt60_ms = times_ms[above_noise[-1]]
         ax_ir.axvspan(0, rt60_ms, alpha=0.06, color="#FFAA00")
