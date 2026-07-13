@@ -28,7 +28,7 @@ MATERIALS = {
     "audience":    Material("Seated Audience",   0.70),
     "soil":        Material("Compacted Soil",    0.15),
     "concrete":    Material("Concrete",          0.02),
-    "air_gap":     Material("Open Air",          0.00),
+    "air_gap":     Material("Open Air",          1.00),
 }
 
 
