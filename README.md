@@ -36,15 +36,25 @@ where `α` is the wall's absorption coefficient, `κ = 0.002 m⁻¹` is air abso
 
 ### 2. Acoustic Impulse Response (AIR)
 
-Recorded hits `(time, energy)` are mapped to sample indices `⌊t × Fs⌋` in a float64 array. A 7-point Hann window smooths each spike to avoid aliasing. The result is normalised to peak amplitude 1.0. To make room character more audible, a linear ramp `[1×, 10×]` is applied to the IR tail (starting 10 ms after direct sound arrival), then renormalised — this lifts late reflections relative to the direct-sound peak.
+Recorded hits `(time, energy, pan)` are mapped to sample indices `⌊t × Fs⌋` in a stereo float64 array. A 7-point Hann window smooths each spike to avoid aliasing. The result is normalised to peak amplitude 1.0. To make room character more audible, a linear ramp `[1×, 10×]` is applied to the IR tail (starting 10 ms after direct sound arrival), then renormalised — this lifts late reflections relative to the direct-sound peak.
 
-### 3. Convolution
+### 3. Binaural Rendering
+
+The IR is stereo. Each ray's arrival direction at the receiver is recorded relative to a listener facing the source, and its lateral component becomes a pan position `∈ [−1, 1]`. Two localisation cues are applied per hit:
+
+- **ILD** (Interaural Level Difference): equal-power panning — `gain_L = cos((pan+1)π/4)`, `gain_R = sin((pan+1)π/4)`
+- **ITD** (Interaural Time Difference): the far ear receives the spike up to 0.66 ms later (the acoustic path difference across a human head), scaled by `|pan|`
+
+Early reflections therefore arrive from directions that match the room geometry — a wall close behind the listener produces a distinct slap-back on one side of the stereo field. Headphones recommended.
+
+### 4. Convolution
 
 ```python
-wet = fftconvolve(dry, ir_boosted, mode="full")
+wet_l = fftconvolve(dry, ir_boosted[:, 0], mode="full")
+wet_r = fftconvolve(dry, ir_boosted[:, 1], mode="full")
 ```
 
-Full-length output preserves the natural ring-out decay beyond the dry signal length. Output is normalised to −1.2 dBFS headroom.
+Each channel is convolved independently and the result written as a stereo WAV. Full-length output preserves the natural ring-out decay beyond the dry signal length. Output is normalised to −1.2 dBFS headroom.
 
 ---
 
@@ -54,10 +64,14 @@ Full-length output preserves the natural ring-out decay beyond the dry signal le
 |------|---------------|
 | `engine.py` | `Material`, `Wall`, `Room`, `AcousticRayTracer`, `build_impulse_response` |
 | `presets.py` | Four historical room definitions returning `(Room, source, receiver, desc)` |
+| `colors.py` | Material display colours, shared by the web UI and the plots |
 | `visualize.py` | Matplotlib plots for room geometry and IR (CLI only) |
 | `main.py` | CLI entry point — argument parsing, convolution, file I/O |
 | `app.py` | Flask REST API serving room data, trace results, and audio processing |
 | `templates/index.html` | Single-page UI — canvas visualisers, Web Audio API, client WAV encoder |
+| `archaeoacoustics.spec` | PyInstaller build definition for the standalone `.exe` |
+
+The web server deliberately avoids importing `visualize.py` — matplotlib is a CLI-only dependency, and keeping it out of the server's import graph lets the packaged executable exclude it entirely (roughly a 50 MB saving).
 
 ---
 
@@ -65,10 +79,10 @@ Full-length output preserves the natural ring-out decay beyond the dry signal le
 
 | Key | Space | Dimensions | RT₆₀ |
 |-----|-------|-----------|-------|
-| `amphitheater` | Roman Stone Theatre | 40 × 25 m | ~93 ms |
-| `cathedral` | Renaissance Cathedral Nave | 30 × 18 m | ~857 ms |
-| `bouleuterion` | Greek Council Hall | 18 × 10 m | ~423 ms |
-| `great_hall` | Medieval Castle Great Hall | 25 × 8 m | ~619 ms |
+| `amphitheater` | Roman Stone Theatre | 40 × 25 m | ~94 ms |
+| `cathedral` | Renaissance Cathedral Nave | 30 × 18 m | ~841 ms |
+| `bouleuterion` | Greek Council Hall | 18 × 10 m | ~388 ms |
+| `great_hall` | Medieval Castle Great Hall | 25 × 8 m | ~571 ms |
 
 RT₆₀ values are simulation estimates and vary with ray count. Real-world values depend on furnishing density, audience absorption, and 3D geometry not captured by this 2D model.
 
@@ -126,6 +140,21 @@ python main.py --list-presets
 | `--plot` | false | Show room + IR plot after processing |
 | `--plot-only` | false | Plot without audio convolution |
 | `--save-ir` | — | Save raw impulse response as `.wav` |
+
+---
+
+## Building a Standalone Executable
+
+The app can be packaged into a single `.exe` that runs without a Python installation. It starts the Flask server on a free port, opens the default browser, and serves the same UI.
+
+```bash
+pip install pyinstaller
+pyinstaller archaeoacoustics.spec
+```
+
+The result is `dist/Archaeoacoustics.exe` (~52 MB). Double-click to run; close the console window to quit.
+
+Recording works because `getUserMedia` treats `127.0.0.1` as a secure context — the same reason the UI works under `python app.py`. When frozen, `app.py` resolves `templates/` through PyInstaller's `sys._MEIPASS` and disables debug mode; running from source is unaffected.
 
 ---
 

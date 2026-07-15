@@ -26,8 +26,9 @@ def save_wav(path: str, sample_rate: int, audio: np.ndarray):
 
 
 def convolve_with_ir(dry: np.ndarray, ir: np.ndarray) -> np.ndarray:
-    wet = fftconvolve(dry, ir, mode="full")
-    wet = wet[: len(dry)]
+    wet_l = fftconvolve(dry, ir[:, 0], mode="full")[: len(dry)]
+    wet_r = fftconvolve(dry, ir[:, 1], mode="full")[: len(dry)]
+    wet = np.stack([wet_l, wet_r], axis=1)
     peak = np.max(np.abs(wet))
     if peak > 0:
         wet *= 0.98 / peak

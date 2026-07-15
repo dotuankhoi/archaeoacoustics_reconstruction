@@ -1,14 +1,34 @@
 import io
+import os
+import socket
+import sys
+import threading
+import webbrowser
+
 import numpy as np
 import scipy.io.wavfile as wav
 from flask import Flask, jsonify, render_template, request, send_file
 from scipy.signal import fftconvolve
 
+from colors import MATERIAL_COLORS
 from engine import AcousticRayTracer, build_impulse_response
 from presets import PRESETS
-from visualize import MATERIAL_COLORS
 
-app = Flask(__name__)
+
+def _resource_path(relative: str) -> str:
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, relative)
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+IS_FROZEN = getattr(sys, "frozen", False)
+
+app = Flask(__name__, template_folder=_resource_path("templates"))
 
 
 def _rt60(ir: np.ndarray, sr: int) -> int:
@@ -69,21 +89,22 @@ def trace(preset_name: str):
 
     room, source, receiver, desc, hits = _run_trace(preset_name, n_rays, max_time)
     ir = build_impulse_response(hits, sample_rate=44100, max_time=max_time)
+    ir_mono = ir.mean(axis=1)
 
     direct_ms = round(min((h.time for h in hits), default=0) * 1000, 1)
 
-    n_out = min(2000, len(ir))
-    block = max(1, len(ir) // n_out)
-    ir_down = [float(np.max(np.abs(ir[i * block:(i + 1) * block]))) for i in range(n_out)]
+    n_out = min(2000, len(ir_mono))
+    block = max(1, len(ir_mono) // n_out)
+    ir_down = [float(np.max(np.abs(ir_mono[i * block:(i + 1) * block]))) for i in range(n_out)]
 
     return jsonify({
         "n_hits":         len(hits),
         "ir":             ir_down,
         "n_buckets":      n_out,
-        "ir_full_len":    len(ir),
+        "ir_full_len":    len(ir_mono),
         "ir_sample_rate": 44100,
         "max_time":       max_time,
-        "rt60_ms":        _rt60(ir, 44100),
+        "rt60_ms":        _rt60(ir_mono, 44100),
         "direct_ms":      direct_ms,
         "description":    desc,
     })
@@ -111,12 +132,14 @@ def process():
     if boost_start < len(ir_boosted):
         n_tail = len(ir_boosted) - boost_start
         ramp = np.linspace(1.0, 10.0, n_tail)
-        ir_boosted[boost_start:] *= ramp
+        ir_boosted[boost_start:] *= ramp[:, None]
     peak_ir = np.max(np.abs(ir_boosted))
     if peak_ir > 0:
         ir_boosted /= peak_ir
 
-    wet = fftconvolve(dry, ir_boosted, mode="full")
+    wet_l = fftconvolve(dry, ir_boosted[:, 0], mode="full")
+    wet_r = fftconvolve(dry, ir_boosted[:, 1], mode="full")
+    wet = np.stack([wet_l, wet_r], axis=1)
     peak_w = np.max(np.abs(wet))
     if peak_w > 0:
         wet *= 0.88 / peak_w
@@ -127,5 +150,23 @@ def process():
     return send_file(buf, mimetype="audio/wav")
 
 
+def _run_desktop():
+    port = _free_port()
+    url = f"http://127.0.0.1:{port}"
+
+    print()
+    print("  Archaeoacoustics: Virtual Soundscape Reconstruction")
+    print(f"  Running at {url}")
+    print("  Your browser should open automatically.")
+    print("  Close this window to quit.")
+    print()
+
+    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False)
+
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, use_reloader=False)
+    if IS_FROZEN:
+        _run_desktop()
+    else:
+        app.run(debug=True, port=5000, use_reloader=False)

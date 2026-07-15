@@ -88,6 +88,7 @@ class Room:
 class RayHit:
     time: float
     energy: float
+    pan: float = 0.0
 
 
 class AcousticRayTracer:
@@ -120,9 +121,17 @@ class AcousticRayTracer:
             return np.linalg.norm(t_proj * direction)
         return None
 
+    def _pan(self, direction: np.ndarray) -> float:
+        arrival = -direction
+        return float(self._facing[0] * arrival[1] - self._facing[1] * arrival[0])
+
     def trace(self) -> list[RayHit]:
         hits: list[RayHit] = []
         angles = np.linspace(0, 2 * np.pi, self.n_rays, endpoint=False)
+
+        to_source = self.source - self.receiver
+        norm = np.linalg.norm(to_source)
+        self._facing = to_source / norm if norm > 0 else np.array([1.0, 0.0])
 
         for angle in angles:
             direction = np.array([np.cos(angle), np.sin(angle)])
@@ -140,7 +149,8 @@ class AcousticRayTracer:
                     air_loss = np.exp(-AIR_ABSORPTION_PER_METER * direct_len)
                     spread = 1.0 / max(direct_len ** 1.5, 0.01)
                     if t_arrive <= self.max_time:
-                        hits.append(RayHit(t_arrive, energy * air_loss * spread))
+                        hits.append(RayHit(t_arrive, energy * air_loss * spread,
+                                           self._pan(direction)))
 
             for _ in range(self.max_bounces):
                 if energy < self.min_energy:
@@ -165,7 +175,8 @@ class AcousticRayTracer:
                     air_loss = np.exp(-AIR_ABSORPTION_PER_METER * total_len)
                     spread = 1.0 / max(total_len ** 1.5, 0.01)
                     if t_arrive <= self.max_time:
-                        hits.append(RayHit(t_arrive, energy * air_loss * spread))
+                        hits.append(RayHit(t_arrive, energy * air_loss * spread,
+                                           self._pan(direction)))
 
                 hit_point = origin + t_min * direction
                 path_length += t_min
@@ -186,22 +197,39 @@ class AcousticRayTracer:
         return hits
 
 
+MAX_ITD_SECONDS = 0.00066
+
+
 def build_impulse_response(hits: list[RayHit],
                             sample_rate: int = 44100,
                             max_time: float = 2.0) -> np.ndarray:
     n_samples = int(max_time * sample_rate)
-    ir = np.zeros(n_samples, dtype=np.float64)
+    ir = np.zeros((n_samples, 2), dtype=np.float64)
 
     for hit in hits:
         sample_idx = int(hit.time * sample_rate)
-        if 0 <= sample_idx < n_samples:
-            ir[sample_idx] += hit.energy
+        if not (0 <= sample_idx < n_samples):
+            continue
+
+        pan = float(np.clip(hit.pan, -1.0, 1.0))
+        gain_l = np.cos((pan + 1.0) * np.pi / 4.0)
+        gain_r = np.sin((pan + 1.0) * np.pi / 4.0)
+
+        itd = int(round(abs(pan) * MAX_ITD_SECONDS * sample_rate))
+        idx_l = sample_idx + (itd if pan > 0 else 0)
+        idx_r = sample_idx + (itd if pan < 0 else 0)
+
+        if idx_l < n_samples:
+            ir[idx_l, 0] += hit.energy * gain_l
+        if idx_r < n_samples:
+            ir[idx_r, 1] += hit.energy * gain_r
 
     if len(hits) > 0:
         window = np.hanning(7)
         window /= window.sum()
         from scipy.signal import fftconvolve
-        ir = fftconvolve(ir, window, mode="same")
+        ir[:, 0] = fftconvolve(ir[:, 0], window, mode="same")
+        ir[:, 1] = fftconvolve(ir[:, 1], window, mode="same")
 
     peak = np.max(np.abs(ir))
     if peak > 0:

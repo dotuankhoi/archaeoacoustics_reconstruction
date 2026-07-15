@@ -252,7 +252,7 @@ audio{width:100%;height:32px;accent-color:var(--ac);display:block}
     <div class="p-name">Roman Theatre</div>
     <div class="p-dims">40 × 25 m · Open-air cavea</div>
     <div class="p-rt60-row">
-      <span class="p-rt60">93</span>
+      <span class="p-rt60">94</span>
       <span class="p-rt60-unit">ms</span>
     </div>
     <div class="p-rt60-lbl">RT₆₀ reverb time</div>
@@ -268,7 +268,7 @@ audio{width:100%;height:32px;accent-color:var(--ac);display:block}
     <div class="p-name">Renaissance Cathedral</div>
     <div class="p-dims">30 × 18 m · Stone nave</div>
     <div class="p-rt60-row">
-      <span class="p-rt60">857</span>
+      <span class="p-rt60">841</span>
       <span class="p-rt60-unit">ms</span>
     </div>
     <div class="p-rt60-lbl">RT₆₀ reverb time</div>
@@ -284,7 +284,7 @@ audio{width:100%;height:32px;accent-color:var(--ac);display:block}
     <div class="p-name">Greek Bouleuterion</div>
     <div class="p-dims">18 × 10 m · Council hall</div>
     <div class="p-rt60-row">
-      <span class="p-rt60">423</span>
+      <span class="p-rt60">388</span>
       <span class="p-rt60-unit">ms</span>
     </div>
     <div class="p-rt60-lbl">RT₆₀ reverb time</div>
@@ -300,7 +300,7 @@ audio{width:100%;height:32px;accent-color:var(--ac);display:block}
     <div class="p-name">Medieval Great Hall</div>
     <div class="p-dims">25 × 8 m · Castle interior</div>
     <div class="p-rt60-row">
-      <span class="p-rt60">619</span>
+      <span class="p-rt60">571</span>
       <span class="p-rt60-unit">ms</span>
     </div>
     <div class="p-rt60-lbl">RT₆₀ reverb time</div>
@@ -392,7 +392,7 @@ audio{width:100%;height:32px;accent-color:var(--ac);display:block}
     <div class="pb-head">
       <span class="pb-dot" style="background:var(--ac)"></span>
       <span class="pb-title" id="wetTitle">In the Space</span>
-      <div class="pb-sub" id="wetSub">Convolved with room AIR</div>
+      <div class="pb-sub" id="wetSub">Convolved with binaural room AIR — headphones recommended</div>
     </div>
     <canvas id="wetWave" class="pb-wave"></canvas>
     <audio id="wetAudio" controls></audio>
@@ -823,11 +823,11 @@ async function finalise(wavBlob, dryBlobForPlayer, audioCtx) {
 
   const wetAB  = await wetBlob.arrayBuffer();
   const wetBuf = await new AudioContext().decodeAudioData(wetAB);
-  drawStaticWave('wetWave', wetBuf.getChannelData(0), '#00D9C4');
+  drawStaticWave('wetWave', toMono(wetBuf), '#00D9C4');
 
   document.getElementById('wetTitle').textContent = `In the ${NAMES[preset]}`;
   document.getElementById('wetSub').textContent =
-    `${currentIR?.n_hits||'—'} ray hits · RT₆₀ ${currentIR?.rt60_ms||'—'} ms`;
+    `${currentIR?.n_hits||'—'} ray hits · RT₆₀ ${currentIR?.rt60_ms||'—'} ms · stereo binaural`;
 
   document.getElementById('pbRow').classList.add('show');
 }
