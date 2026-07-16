@@ -23,6 +23,9 @@ env/
 *.flac
 *.m4a
 
+# ...except the bundled demo sample
+!samples/sample_voice.mp3
+
 # Matplotlib output
 *.png
 *.pdf

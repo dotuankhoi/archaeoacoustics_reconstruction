@@ -319,7 +319,7 @@ audio{width:100%;height:32px;accent-color:var(--ac);display:block}
 
   <div class="viz-panel">
     <div class="viz-head">
-      <div class="viz-title">Room Geometry · Ray Simulation</div>
+      <div class="viz-title">Room Geometry · Drag Source &amp; Receiver</div>
       <div class="viz-badge" id="roomBadge">—</div>
     </div>
     <canvas id="roomCanvas"></canvas>
@@ -369,11 +369,14 @@ audio{width:100%;height:32px;accent-color:var(--ac);display:block}
     <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()" title="Upload audio file">
       ↑ Upload File
     </button>
+    <button class="upload-btn" id="sampleBtn" onclick="loadSample()" title="No microphone? Use the bundled demo clip">
+      ▸ Try Sample
+    </button>
   </div>
   <div class="wave-area">
     <div class="wave-lbl">Live Microphone · Waveform</div>
     <canvas id="waveCanvas"></canvas>
-    <div id="recStatus">Select a historical space above, then press Record or upload an audio file.</div>
+    <div id="recStatus">Select a space above, drag the source/receiver dots on the map, then Record or upload audio.</div>
   </div>
 </div>
 
@@ -417,11 +420,17 @@ let liveAFid     = null;
 let rayAFid      = null;
 let rayPaths     = [];
 let rayTick      = 0;
+let srcPos       = null;   // current (draggable) source position, world coords
+let recvPos      = null;   // current (draggable) receiver position
+let lastDryWav   = null;   // last dry WAV blob, for auto re-render after a drag
+let dragTarget   = null;   // 'src' | 'recv' while dragging
+let traceTimer   = null;   // debounce for re-trace after drag
 const DPR        = window.devicePixelRatio || 1;
 
 function setInputsLocked(locked) {
   document.getElementById('recBtn').disabled    = locked;
   document.getElementById('uploadBtn').disabled = locked;
+  document.getElementById('sampleBtn').disabled = locked;
 }
 
 const NAMES = {
@@ -463,14 +472,29 @@ async function selectPreset(key) {
   document.getElementById('sPreset').textContent =
     key.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
   document.getElementById('recStatus').textContent =
-    `"${NAMES[key]}" selected — press Record to begin.`;
+    `"${NAMES[key]}" selected — drag the dots on the map, then Record or upload.`;
 
   const d = presetsData[key];
   if (d) {
-    drawRoom(d.walls, d.source, d.receiver);
-    buildAndAnimateRays(d.walls, d.source, d.receiver);
+    srcPos  = [...d.source];
+    recvPos = [...d.receiver];
+    drawRoom(d.walls, srcPos, recvPos);
+    buildAndAnimateRays(d.walls, srcPos, recvPos);
   }
 
+  await refreshAcoustics();
+}
+
+function posQuery() {
+  return `sx=${srcPos[0].toFixed(2)}&sy=${srcPos[1].toFixed(2)}` +
+         `&rx=${recvPos[0].toFixed(2)}&ry=${recvPos[1].toFixed(2)}`;
+}
+
+function srDistance() {
+  return Math.hypot(srcPos[0]-recvPos[0], srcPos[1]-recvPos[1]);
+}
+
+async function refreshAcoustics() {
   document.getElementById('irPlaceholder').innerHTML =
     '<div class="spinner"></div><div>Computing impulse response…</div>';
   document.getElementById('irPlaceholder').style.display = 'flex';
@@ -481,7 +505,7 @@ async function selectPreset(key) {
   document.getElementById('sDirect').textContent  = '…';
 
   try {
-    const res = await fetch(`/api/trace/${key}?rays=2000`);
+    const res = await fetch(`/api/trace/${preset}?rays=2000&` + posQuery());
     currentIR = await res.json();
     const { n_hits, rt60_ms, direct_ms } = currentIR;
 
@@ -491,7 +515,7 @@ async function selectPreset(key) {
     document.getElementById('irBadge').innerHTML   =
       `<b>${n_hits}</b> hits · RT₆₀ <b>${rt60_ms}</b> ms`;
     document.getElementById('roomBadge').innerHTML =
-      `<b>${presetsData[key].walls.length}</b> walls`;
+      `<b>${presetsData[preset].walls.length}</b> walls · src→recv <b>${srDistance().toFixed(1)}</b> m`;
 
     document.getElementById('irPlaceholder').style.display = 'none';
     const irc = document.getElementById('irCanvas');
@@ -501,8 +525,77 @@ async function selectPreset(key) {
   } catch(e) {
     document.getElementById('irPlaceholder').innerHTML =
       '<div style="color:#FF3355">Failed to compute IR</div>';
+    return;
+  }
+
+  // If audio was already rendered once, re-render it for the new positions
+  if (lastDryWav && !isProcessing && !isRecording) {
+    enterProcessing('Re-rendering audio for the new positions…');
+    try {
+      await processAndShowWet(lastDryWav);
+      exitProcessing(true, 'Wet track updated for the new positions.');
+    } catch(e) {
+      exitProcessing(false, 'Error: ' + e.message);
+    }
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Draggable source / receiver
+// ─────────────────────────────────────────────────────────────────────────────
+const roomC = document.getElementById('roomCanvas');
+roomC.style.touchAction = 'none';
+
+function canvasPoint(e) {
+  const r = roomC.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function hitTest(p) {
+  if (!roomC._ts || !srcPos) return null;
+  const sp = roomC._ts(srcPos[0], srcPos[1]);
+  const rp = roomC._ts(recvPos[0], recvPos[1]);
+  if (Math.hypot(p.x-sp.x, p.y-sp.y) < 14) return 'src';
+  if (Math.hypot(p.x-rp.x, p.y-rp.y) < 14) return 'recv';
+  return null;
+}
+
+roomC.addEventListener('pointerdown', e => {
+  const t = hitTest(canvasPoint(e));
+  if (!t) return;
+  clearTimeout(traceTimer);
+  dragTarget = t;
+  roomC.setPointerCapture(e.pointerId);
+  roomC.style.cursor = 'grabbing';
+  e.preventDefault();
+});
+
+roomC.addEventListener('pointermove', e => {
+  if (!dragTarget) {
+    roomC.style.cursor = hitTest(canvasPoint(e)) ? 'grab' : 'default';
+    return;
+  }
+  const p  = canvasPoint(e);
+  const w  = roomC._inv(p.x, p.y);
+  const bb = roomC._bbox, m = 0.4;
+  const x  = Math.min(bb.x1 - m, Math.max(bb.x0 + m, w.x));
+  const y  = Math.min(bb.y1 - m, Math.max(bb.y0 + m, w.y));
+  if (dragTarget === 'src') srcPos = [x, y]; else recvPos = [x, y];
+
+  const d = presetsData[preset];
+  drawRoom(d.walls, srcPos, recvPos);
+  buildAndAnimateRays(d.walls, srcPos, recvPos);
+  document.getElementById('roomBadge').innerHTML =
+    `src→recv <b>${srDistance().toFixed(1)}</b> m`;
+});
+
+roomC.addEventListener('pointerup', e => {
+  if (!dragTarget) return;
+  dragTarget = null;
+  roomC.style.cursor = 'grab';
+  clearTimeout(traceTimer);
+  traceTimer = setTimeout(refreshAcoustics, 250);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Room drawing
@@ -529,6 +622,8 @@ function drawRoom(walls, src, recv) {
   const ts = (x,y) => ({ x: ox + x*scl, y: H - (oy + y*scl) });
 
   canvas._ts = ts; canvas._walls = walls; canvas._src = src; canvas._recv = recv;
+  canvas._inv  = (px,py) => ({ x: (px - ox) / scl, y: (H - py - oy) / scl });
+  canvas._bbox = { x0, y0, x1, y1 };
 
   // Background
   ctx.fillStyle = '#050507'; ctx.fillRect(0,0,W,H);
@@ -557,23 +652,27 @@ function drawRoom(walls, src, recv) {
     ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
   });
 
-  // Source
+  // Source (draggable handle)
   const sp = ts(src[0], src[1]);
   ctx.shadowColor='#00D9C4'; ctx.shadowBlur=16;
   ctx.fillStyle='#00D9C4';
   ctx.beginPath(); ctx.arc(sp.x, sp.y, 5, 0, Math.PI*2); ctx.fill();
   ctx.shadowBlur=0;
+  ctx.strokeStyle='rgba(0,217,196,.35)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(sp.x, sp.y, 10, 0, Math.PI*2); ctx.stroke();
   ctx.fillStyle='#00D9C4'; ctx.font='8px "JetBrains Mono",monospace';
-  ctx.fillText('SOURCE', sp.x+9, sp.y+4);
+  ctx.fillText('SOURCE', sp.x+13, sp.y+4);
 
-  // Receiver
+  // Receiver (draggable handle)
   const rp = ts(recv[0], recv[1]);
   ctx.shadowColor='#FF3355'; ctx.shadowBlur=14;
   ctx.fillStyle='#FF3355';
   ctx.beginPath(); ctx.arc(rp.x, rp.y, 5, 0, Math.PI*2); ctx.fill();
   ctx.shadowBlur=0;
+  ctx.strokeStyle='rgba(255,51,85,.35)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(rp.x, rp.y, 10, 0, Math.PI*2); ctx.stroke();
   ctx.fillStyle='#FF3355'; ctx.font='8px "JetBrains Mono",monospace';
-  ctx.fillText('RECEIVER', rp.x+9, rp.y+4);
+  ctx.fillText('RECEIVER', rp.x+13, rp.y+4);
 
   canvas._base = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
@@ -805,16 +904,14 @@ function exitProcessing(ok, msg) {
   document.getElementById('recStatus').textContent = msg;
 }
 
-async function finalise(wavBlob, dryBlobForPlayer, audioCtx) {
-  const ab   = await dryBlobForPlayer.arrayBuffer();
-  const abuf = await audioCtx.decodeAudioData(ab);
-  const mono = toMono(abuf);
-  drawStaticWave('dryWave', mono, '#3A3A4A');
-  document.getElementById('dryAudio').src = URL.createObjectURL(dryBlobForPlayer);
-
+async function processAndShowWet(wavBlob) {
   const fd = new FormData();
   fd.append('audio', wavBlob, 'audio.wav');
   fd.append('preset', preset);
+  fd.append('sx', srcPos[0].toFixed(3));
+  fd.append('sy', srcPos[1].toFixed(3));
+  fd.append('rx', recvPos[0].toFixed(3));
+  fd.append('ry', recvPos[1].toFixed(3));
   const resp = await fetch('/api/process', {method:'POST', body:fd});
   if (!resp.ok) throw new Error('Server error ' + resp.status);
   const wetBlob = await resp.blob();
@@ -830,6 +927,16 @@ async function finalise(wavBlob, dryBlobForPlayer, audioCtx) {
     `${currentIR?.n_hits||'—'} ray hits · RT₆₀ ${currentIR?.rt60_ms||'—'} ms · stereo binaural`;
 
   document.getElementById('pbRow').classList.add('show');
+}
+
+async function finalise(wavBlob, dryBlobForPlayer, audioCtx) {
+  const ab   = await dryBlobForPlayer.arrayBuffer();
+  const abuf = await audioCtx.decodeAudioData(ab);
+  drawStaticWave('dryWave', toMono(abuf), '#3A3A4A');
+  document.getElementById('dryAudio').src = URL.createObjectURL(dryBlobForPlayer);
+
+  lastDryWav = wavBlob;   // keep for auto re-render when positions change
+  await processAndShowWet(wavBlob);
 }
 
 async function toggleRecord() {
@@ -923,6 +1030,23 @@ async function handleFileUpload(file) {
     exitProcessing(false, 'Error: ' + e.message);
   }
   document.getElementById('fileInput').value = '';
+}
+
+async function loadSample() {
+  if (!preset) {
+    document.getElementById('recStatus').textContent = 'Select a historical space first.';
+    return;
+  }
+  if (isProcessing || isRecording) return;
+  try {
+    const resp = await fetch('/samples/sample_voice.mp3');
+    if (!resp.ok) throw new Error('Sample not found');
+    const blob = await resp.blob();
+    const file = new File([blob], 'sample_voice.mp3', {type: 'audio/mpeg'});
+    await handleFileUpload(file);
+  } catch(e) {
+    document.getElementById('recStatus').textContent = 'Error loading sample: ' + e.message;
+  }
 }
 
 function toMono(abuf) {

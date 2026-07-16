@@ -108,8 +108,9 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Open `http://localhost:5000` in your browser. Select a room preset, then record your voice or upload an audio file. The UI renders:
+Open `http://localhost:5000` in your browser. Select a room preset, then record your voice, upload an audio file, or press **Try Sample** to use the bundled demo clip (a dry voice plus three claps — no microphone required). The UI renders:
 - Animated ray simulation on the room geometry canvas
+- **Draggable source and receiver** — grab either dot on the map and move it; the trace, impulse response, RT₆₀, and stereo image all update for the new positions, and any already-rendered audio is automatically re-rendered
 - Acoustic Impulse Response spectrum
 - Side-by-side dry/wet waveform comparison with in-browser playback
 
@@ -166,7 +167,7 @@ The Flask server exposes three endpoints used by the UI:
 Returns wall geometry, material absorption coefficients, source/receiver positions, and display colours for all presets.
 
 ### `GET /api/trace/<preset>?rays=2000`
-Runs the ray tracer and returns:
+Runs the ray tracer and returns the results below. Optional `sx`, `sy`, `rx`, `ry` query parameters override the preset's source and receiver positions (metres, room coordinates); omitted or malformed values fall back to the preset defaults.
 
 ```json
 {
@@ -181,7 +182,7 @@ Runs the ray tracer and returns:
 IR data is max-pooled (not stride-sampled) to preserve narrow energy spikes for accurate visualisation.
 
 ### `POST /api/process`
-Accepts `multipart/form-data` with `audio` (WAV) and `preset` fields. Returns the convolved wet audio as `audio/wav`.
+Accepts `multipart/form-data` with `audio` (WAV) and `preset` fields, plus optional `sx`/`sy`/`rx`/`ry` position overrides. Returns the convolved wet audio as stereo `audio/wav`.
 
 ---
 

@@ -7,7 +7,7 @@ import webbrowser
 
 import numpy as np
 import scipy.io.wavfile as wav
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
 from scipy.signal import fftconvolve
 
 from colors import MATERIAL_COLORS
@@ -41,8 +41,20 @@ def _rt60(ir: np.ndarray, sr: int) -> int:
     return int(above[-1] / sr * 1000) if len(above) else 0
 
 
-def _run_trace(preset_name: str, n_rays: int = 2000, max_time: float = 2.5):
-    room, source, receiver, desc = PRESETS[preset_name]()
+def _parse_pos(x, y):
+    if x is None or y is None:
+        return None
+    try:
+        return (float(x), float(y))
+    except ValueError:
+        return None
+
+
+def _run_trace(preset_name: str, n_rays: int = 2000, max_time: float = 2.5,
+               source=None, receiver=None):
+    room, preset_src, preset_recv, desc = PRESETS[preset_name]()
+    source = source if source is not None else preset_src
+    receiver = receiver if receiver is not None else preset_recv
     tracer = AcousticRayTracer(
         room, source, receiver,
         n_rays=n_rays, max_bounces=50, max_time=max_time,
@@ -55,6 +67,11 @@ def _run_trace(preset_name: str, n_rays: int = 2000, max_time: float = 2.5):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/samples/<path:name>")
+def sample_file(name):
+    return send_from_directory(_resource_path("samples"), name)
 
 
 @app.route("/api/presets")
@@ -86,8 +103,11 @@ def trace(preset_name: str):
 
     n_rays   = int(request.args.get("rays", 2000))
     max_time = float(request.args.get("max_time", 2.5))
+    src_o    = _parse_pos(request.args.get("sx"), request.args.get("sy"))
+    recv_o   = _parse_pos(request.args.get("rx"), request.args.get("ry"))
 
-    room, source, receiver, desc, hits = _run_trace(preset_name, n_rays, max_time)
+    room, source, receiver, desc, hits = _run_trace(
+        preset_name, n_rays, max_time, source=src_o, receiver=recv_o)
     ir = build_impulse_response(hits, sample_rate=44100, max_time=max_time)
     ir_mono = ir.mean(axis=1)
 
@@ -123,7 +143,10 @@ def process():
         dry = dry.mean(axis=1)
     dry /= np.max(np.abs(dry)) + 1e-12
 
-    _, _, _, _, hits = _run_trace(preset_name, n_rays=2000)
+    src_o  = _parse_pos(request.form.get("sx"), request.form.get("sy"))
+    recv_o = _parse_pos(request.form.get("rx"), request.form.get("ry"))
+    _, _, _, _, hits = _run_trace(preset_name, n_rays=2000,
+                                  source=src_o, receiver=recv_o)
     ir = build_impulse_response(hits, sample_rate=sr, max_time=3.0)
 
     direct_ms = min((h.time for h in hits), default=0) * 1000
