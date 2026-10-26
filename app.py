@@ -29,6 +29,29 @@ def _free_port() -> int:
 IS_FROZEN = getattr(sys, "frozen", False)
 
 app = Flask(__name__, template_folder=_resource_path("templates"))
+app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
+
+
+@app.errorhandler(413)
+def upload_too_large(error):
+    return jsonify({"error": "Audio upload must be smaller than 32 MB"}), 413
+
+
+@app.errorhandler(ValueError)
+def invalid_input(error):
+    return jsonify({"error": str(error)}), 400
+
+
+def _number(values, name, default, minimum, maximum, integer=False):
+    try:
+        value = float(values.get(name, default))
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be a number") from None
+    if not np.isfinite(value) or not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    if integer and not value.is_integer():
+        raise ValueError(f"{name} must be a whole number")
+    return int(value) if integer else value
 
 
 def _rt60(ir: np.ndarray, sr: int) -> int:
@@ -42,12 +65,15 @@ def _rt60(ir: np.ndarray, sr: int) -> int:
 
 
 def _parse_pos(x, y):
-    if x is None or y is None:
+    if x is None and y is None:
         return None
     try:
-        return (float(x), float(y))
-    except ValueError:
-        return None
+        position = (float(x), float(y))
+    except (TypeError, ValueError):
+        raise ValueError("Position requires two numeric coordinates") from None
+    if not all(np.isfinite(position)):
+        raise ValueError("Position coordinates must be finite")
+    return position
 
 
 def _run_trace(preset_name: str, n_rays: int = 2000, max_time: float = 2.5,
@@ -55,6 +81,13 @@ def _run_trace(preset_name: str, n_rays: int = 2000, max_time: float = 2.5,
     room, preset_src, preset_recv, desc = PRESETS[preset_name]()
     source = source if source is not None else preset_src
     receiver = receiver if receiver is not None else preset_recv
+    xs = [v for w in room.walls for v in (w.x0, w.x1)]
+    ys = [v for w in room.walls for v in (w.y0, w.y1)]
+    for position in (source, receiver):
+        if not min(xs) < position[0] < max(xs) or not min(ys) < position[1] < max(ys):
+            raise ValueError("Positions must be inside the room bounds")
+    if np.linalg.norm(np.subtract(source, receiver)) < 0.3:
+        raise ValueError("Speaker and listener must be at least 0.3 m apart")
     tracer = AcousticRayTracer(
         room, source, receiver,
         n_rays=n_rays, max_bounces=50, max_time=max_time,
@@ -101,8 +134,8 @@ def trace(preset_name: str):
     if preset_name not in PRESETS:
         return jsonify({"error": "Unknown preset"}), 404
 
-    n_rays   = int(request.args.get("rays", 2000))
-    max_time = float(request.args.get("max_time", 2.5))
+    n_rays = _number(request.args, "rays", 2000, 100, 10000, integer=True)
+    max_time = _number(request.args, "max_time", 2.5, 0.1, 5)
     src_o    = _parse_pos(request.args.get("sx"), request.args.get("sy"))
     recv_o   = _parse_pos(request.args.get("rx"), request.args.get("ry"))
 
@@ -136,8 +169,21 @@ def process():
     if preset_name not in PRESETS:
         return jsonify({"error": "Unknown preset"}), 400
 
+    if "audio" not in request.files:
+        raise ValueError("Choose a WAV file to process")
     audio_bytes = request.files["audio"].read()
-    sr, dry = wav.read(io.BytesIO(audio_bytes))
+    try:
+        sr, dry = wav.read(io.BytesIO(audio_bytes))
+    except (ValueError, OSError, EOFError):
+        raise ValueError("Audio must be a valid WAV file") from None
+    if not 8000 <= sr <= 192000 or dry.size == 0 or dry.ndim not in (1, 2):
+        raise ValueError("Audio must contain samples at 8000–192000 Hz")
+    if len(dry) / sr > 120:
+        raise ValueError("Audio must be 120 seconds or shorter")
+    if not np.all(np.isfinite(dry)):
+        raise ValueError("Audio contains non-finite samples")
+    if dry.dtype == np.uint8:
+        dry = dry.astype(np.float64) - 128
     dry = dry.astype(np.float64)
     if dry.ndim > 1:
         dry = dry.mean(axis=1)
